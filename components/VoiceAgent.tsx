@@ -35,6 +35,7 @@ const logInquiryDeclaration: FunctionDeclaration = {
 interface VoiceAgentProps {
   apiKey: string;
   systemInstruction?: string;
+  initialMessage?: string;
   agentName?: string;
   onClose?: () => void;
   onSessionComplete?: (log: CallLog) => void;
@@ -43,6 +44,7 @@ interface VoiceAgentProps {
 const VoiceAgent: React.FC<VoiceAgentProps> = ({ 
   apiKey, 
   systemInstruction = DEFAULT_SYSTEM_INSTRUCTION,
+  initialMessage,
   agentName = "Kredmint Support",
   onClose,
   onSessionComplete
@@ -141,26 +143,41 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
       outputNode.connect(outputContextRef.current!.destination);
       outputNode.connect(analyserRef.current);
 
-      // Setup Recording Destination (Mixer)
+      // --- RECORDING SETUP START ---
+      // Create a destination node where we can pipe all audio (mic + ai)
       recordingDestinationRef.current = outputContextRef.current!.createMediaStreamDestination();
+      
+      // 1. Pipe AI Output to Recorder
       outputNode.connect(recordingDestinationRef.current);
 
       // Setup Input Stream
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // Connect Mic to Recorder 
+      // 2. Pipe User Mic to Recorder
+      // We create a source in the OUTPUT context (24kHz) just for recording purposes
       const micSourceForRecord = outputContextRef.current!.createMediaStreamSource(stream);
       micSourceForRecord.connect(recordingDestinationRef.current);
 
       // Start Recording
       recordedChunksRef.current = [];
       const recorder = new MediaRecorder(recordingDestinationRef.current.stream);
+      
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+            recordedChunksRef.current.push(e.data);
+        }
       };
-      recorder.start();
+      
+      // Request data every 1 second to ensure we don't lose everything if it crashes
+      recorder.start(1000); 
       mediaRecorderRef.current = recorder;
+      // --- RECORDING SETUP END ---
+
+      // Construct effective instructions
+      const effectiveInstructions = initialMessage 
+        ? `${systemInstruction}\n\nIMPORTANT: Your very first response in this conversation must be exactly this message: "${initialMessage}". Say it immediately upon connection.` 
+        : systemInstruction;
 
       // Setup GenAI Connection
       const sessionPromise = ai.live.connect({
@@ -170,7 +187,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
-          systemInstruction: systemInstruction,
+          systemInstruction: effectiveInstructions,
           inputAudioTranscription: { model: "gemini-2.5-flash-native-audio-preview-09-2025" },
           outputAudioTranscription: { model: "gemini-2.5-flash-native-audio-preview-09-2025" },
           tools: [{ functionDeclarations: [logInquiryDeclaration] }],
@@ -180,7 +197,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
             console.log("Connection Established");
             setIsConnected(true);
             
-            // Setup Mic for API
+            // Setup Mic for API (using input context 16kHz)
             const source = inputContextRef.current!.createMediaStreamSource(stream);
             const processor = inputContextRef.current!.createScriptProcessor(4096, 1, 1);
             processorRef.current = processor;
@@ -225,9 +242,6 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
             // Turn Handling for Latency Logic
             if (message.serverContent?.turnComplete) {
                // User finished speaking (or model finished turn, but usually indicates interaction point)
-               // However, Live API `turnComplete` usually signifies Model is done.
-               // We rely more on `inputAudioTranscription` + silence to detect user finish, 
-               // but for this demo, we can assume if we just got a user transcript, we are waiting.
             }
             
             if (inputTrans) {
@@ -319,7 +333,10 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
         mediaRecorderRef.current.onstop = () => resolve();
         mediaRecorderRef.current.stop();
       });
-      const audioBlob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+      
+      // Use the actual mime type of the recorder to prevent format issues
+      const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+      const audioBlob = new Blob(recordedChunksRef.current, { type: mimeType });
       audioUrl = URL.createObjectURL(audioBlob);
     }
 
@@ -379,8 +396,6 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
   useEffect(() => {
     return () => {
         if (isConnected) {
-           // We can't do async disconnect cleanly on unmount easily without a ref, 
-           // but we can try to close resources.
            if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
            if (inputContextRef.current) inputContextRef.current.close();
            if (outputContextRef.current) outputContextRef.current.close();
@@ -398,21 +413,20 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-700">
+    <div className="flex flex-col h-full w-full bg-white rounded-xl overflow-hidden shadow-2xl border border-gray-200">
       {/* Header */}
-      <div className="bg-slate-800 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+      <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
         <div>
-          <h2 className="text-white font-semibold flex items-center gap-2">
+          <h2 className="text-gray-900 font-semibold flex items-center gap-2">
             <span className={`h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : isAnalyzing ? 'bg-yellow-500 animate-bounce' : 'bg-red-500'}`} />
             {agentName}
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-gray-500">
              {getStatusMessage()}
           </p>
         </div>
-        {/* Only show close if not analyzing */}
         {!isAnalyzing && onClose && (
-          <button onClick={disconnect} className="text-slate-400 hover:text-white transition">
+          <button onClick={disconnect} className="text-gray-400 hover:text-gray-700 transition">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -423,7 +437,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
       <div className="flex-1 overflow-y-auto p-6 flex flex-col md:flex-row gap-6">
         {/* Visualizer & Controls */}
         <div className="flex-1 flex flex-col gap-6">
-          <div className="bg-slate-950 rounded-xl border border-slate-800 p-6 flex flex-col items-center justify-center min-h-[300px] relative overflow-hidden">
+          <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 flex flex-col items-center justify-center min-h-[300px] relative overflow-hidden">
              {/* Background decoration */}
              <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-purple-500/5 pointer-events-none" />
              
@@ -431,7 +445,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
              
              {/* Latency/Filler Indicator */}
              {latencyStatus === 'filler' && (
-               <div className="absolute top-4 bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded-full text-xs font-semibold animate-pulse border border-yellow-500/50">
+               <div className="absolute top-4 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-semibold animate-pulse border border-yellow-200">
                  System: Sending Filler Audio...
                </div>
              )}
@@ -440,7 +454,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
                {!isConnected && !isAnalyzing ? (
                   <button
                     onClick={connectToGemini}
-                    className="group relative px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-semibold shadow-lg shadow-blue-900/20 transition-all hover:scale-105 flex items-center gap-3"
+                    className="group relative px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-semibold shadow-lg shadow-blue-500/20 transition-all hover:scale-105 flex items-center gap-3"
                   >
                     <span className="absolute inset-0 w-full h-full rounded-full opacity-0 group-hover:opacity-20 bg-white transition-opacity" />
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -449,8 +463,8 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
                     Start Conversation
                   </button>
                ) : isAnalyzing ? (
-                  <div className="flex items-center gap-3 px-8 py-3 text-white">
-                    <svg className="animate-spin h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-3 px-8 py-3 text-gray-600 font-medium">
+                    <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -459,7 +473,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
                ) : (
                   <button
                     onClick={disconnect}
-                    className="px-8 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 rounded-full font-semibold transition-all flex items-center gap-3"
+                    className="px-8 py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-full font-semibold transition-all flex items-center gap-3"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
@@ -468,19 +482,19 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
                   </button>
                )}
              </div>
-             {error && <p className="mt-4 text-red-400 text-sm">{error}</p>}
+             {error && <p className="mt-4 text-red-500 text-sm">{error}</p>}
           </div>
           
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 flex-1 overflow-y-auto max-h-[300px]">
-             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Live Transcript</h3>
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex-1 overflow-y-auto max-h-[300px]">
+             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Live Transcript</h3>
              <div className="space-y-3">
-                {realtimeTranscript.length === 0 && <p className="text-slate-500 text-sm italic">Waiting for conversation...</p>}
+                {realtimeTranscript.length === 0 && <p className="text-gray-400 text-sm italic">Waiting for conversation...</p>}
                 {realtimeTranscript.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] rounded-lg p-3 text-sm ${
                       msg.role === 'user' 
-                        ? 'bg-blue-600/20 text-blue-100 border border-blue-500/30' 
-                        : 'bg-slate-700/50 text-slate-200 border border-slate-600'
+                        ? 'bg-blue-600 text-white shadow-sm' 
+                        : 'bg-white text-gray-800 border border-gray-200 shadow-sm'
                     }`}>
                       <p>{msg.text}</p>
                     </div>
@@ -492,10 +506,10 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
 
         {/* Real-time Data Panel */}
         <div className="w-full md:w-80 flex flex-col gap-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col h-full max-h-[600px]">
-            <div className="p-4 bg-slate-800 border-b border-slate-700">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col h-full max-h-[600px] shadow-sm">
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
                 </svg>
                 Live Actions
@@ -503,21 +517,21 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {inquiries.length === 0 ? (
-                <div className="text-center text-slate-500 text-sm py-8">
+                <div className="text-center text-gray-500 text-sm py-8">
                   No actions captured yet.
                   <br/>
                   <span className="text-xs opacity-60">Ask the agent to "Log an inquiry"</span>
                 </div>
               ) : (
                 inquiries.map(inq => (
-                  <div key={inq.id} className="bg-slate-700/50 p-3 rounded-lg border border-slate-600 border-l-4 border-l-blue-500">
+                  <div key={inq.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm border-l-4 border-l-blue-500">
                     <div className="flex justify-between items-start mb-1">
-                      <span className="text-blue-300 font-mono text-[10px]">#{inq.id}</span>
-                      <span className="text-[10px] text-slate-400">{inq.timestamp.toLocaleTimeString()}</span>
+                      <span className="text-blue-600 font-mono text-[10px]">#{inq.id}</span>
+                      <span className="text-[10px] text-gray-500">{inq.timestamp.toLocaleTimeString()}</span>
                     </div>
-                    <div className="text-sm text-white font-medium mb-0.5">{inq.product}</div>
-                    <div className="text-xs text-slate-300">{inq.customerName}</div>
-                    <div className="text-xs text-slate-400">{inq.mobile}</div>
+                    <div className="text-sm text-gray-900 font-medium mb-0.5">{inq.product}</div>
+                    <div className="text-xs text-gray-600">{inq.customerName}</div>
+                    <div className="text-xs text-gray-500">{inq.mobile}</div>
                   </div>
                 ))
               )}

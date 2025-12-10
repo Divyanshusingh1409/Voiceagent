@@ -30,6 +30,7 @@ export interface Agent {
   status: 'Active' | 'Inactive';
   voice: string;
   systemInstruction: string;
+  initialMessage?: string; // New field for the first message
 }
 
 export interface Contact {
@@ -51,6 +52,7 @@ export interface Campaign {
   scheduleTime?: string;
   startDate?: string;
   contactList?: Contact[];
+  agentPromptOverride?: string; // New field for campaign-specific instruction
 }
 
 export interface CallLog {

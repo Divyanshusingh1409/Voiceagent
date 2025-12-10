@@ -34,7 +34,7 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, isActive }) => {
         ctx.beginPath();
         ctx.moveTo(0, centerY);
         ctx.lineTo(width, centerY);
-        ctx.strokeStyle = 'rgba(94, 234, 212, 0.2)'; // Teal with low opacity
+        ctx.strokeStyle = 'rgba(13, 148, 136, 0.2)'; // Teal 600 low opacity
         ctx.lineWidth = 2;
         ctx.stroke();
         return;
@@ -45,7 +45,7 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, isActive }) => {
       analyser.getByteTimeDomainData(dataArray);
 
       ctx.lineWidth = 3;
-      ctx.strokeStyle = '#2dd4bf'; // Teal-400
+      ctx.strokeStyle = '#0d9488'; // Teal-600
       ctx.beginPath();
 
       const sliceWidth = width * 1.0 / bufferLength;
@@ -82,7 +82,7 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, isActive }) => {
   return (
     <canvas 
       ref={canvasRef} 
-      className="w-full h-32 bg-slate-800 rounded-lg shadow-inner border border-slate-700" 
+      className="w-full h-32 bg-gray-50 rounded-lg shadow-inner border border-gray-200" 
     />
   );
 };
