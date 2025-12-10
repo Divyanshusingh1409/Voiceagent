@@ -1,90 +1,117 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import VoiceAgent from './components/VoiceAgent';
-import { Agent, Campaign, CallLog, ApiKey, Contact, PRODUCTS } from './types';
+import { Agent, Campaign, CallLog, ApiKey, Contact, SipConfig } from './types';
+import { api } from './services/api';
 
 // --- Icons ---
-const LayoutDashboard = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>;
-const Users = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
-const PhoneCall = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
-const SettingsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
-const Megaphone = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>;
-const Plus = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
-const Play = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
-const History = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 6v6l4 2"/></svg>;
-const Download = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
-const X = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>;
-const UploadIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
-const Calendar = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>;
-const Trash = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>;
-const Edit = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>;
-const ArrowRight = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>;
-const ArrowLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>;
-const FileAudio = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v11.5"/><path d="M6 8h2"/><path d="M6 12h2"/><path d="M6 16h2"/></svg>;
-
-// --- Mock Data ---
-const MOCK_AGENTS: Agent[] = [
-  { 
-    id: 'ag_01', 
-    name: 'Kredmint Support', 
-    type: 'Inbound', 
-    status: 'Active', 
-    voice: 'Kore',
-    initialMessage: "Hello! Welcome to Kredmint. How can I help you with your financing needs today?",
-    systemInstruction: `You are a helpful and polite customer support agent for Kredmint.
-Your goal is to assist customers with information about Kredmint's financial products and guide them on how to apply via the App or Web Portal.
-
-Knowledge Base:
-1. Kredmint Offers: Distribution/Retailer Finance, Invoice Discounting (ID), Pre-Invoice Discounting (PID), Supplier Invoice Discounting (SID), Term Loans.
-2. App Features: Apply for loans, Upload docs, Track status, View repayment.
-3. Onboarding: Download App -> Register -> KYC -> Choose Product -> Review -> Disbursal.
-
-Speak in Hinglish or English.
-If a user wants to apply, ask for name and mobile number to "Log an Inquiry".`
-  },
-  { id: 'ag_02', name: 'Lead Qualifier', type: 'Outbound', status: 'Inactive', voice: 'Puck', initialMessage: "Hi, this is Kredmint calling. Am I speaking with the business owner?", systemInstruction: 'You are a lead qualification agent for Kredmint. Ask about turnover and business vintage.' },
-  { id: 'ag_03', name: 'Collection Agent', type: 'Outbound', status: 'Active', voice: 'Fenrir', initialMessage: "Good morning. This is a payment reminder from Kredmint.", systemInstruction: 'You are a payment collection assistant. Be polite but firm about upcoming due dates.' }
-];
-
-const MOCK_CAMPAIGNS: Campaign[] = [
-  { id: 'cmp_01', name: 'Q1 Retailer Outreach', agentId: 'ag_02', status: 'Running', progress: 45, totalLeads: 2000, connected: 450, frequency: 'weekly', scheduleTime: '09:00', startDate: '2024-03-01' },
-  { id: 'cmp_02', name: 'Overdue Reminders', agentId: 'ag_03', status: 'Scheduled', progress: 0, totalLeads: 500, connected: 0, frequency: 'daily', scheduleTime: '14:00', startDate: '2024-03-05' },
-  { id: 'cmp_03', name: 'New Product Launch', agentId: 'ag_01', status: 'Completed', progress: 100, totalLeads: 1200, connected: 890, frequency: 'weekly', scheduleTime: '10:00', startDate: '2024-02-15' },
-];
-
-const INIT_LOGS: CallLog[] = [
-  { id: 'call_9821', agentName: 'Kredmint Support', duration: '2m 14s', durationSeconds: 134, status: 'Completed', timestamp: '10:30 AM', date: new Date(Date.now() - 3600000), sentiment: 'Positive', sentimentReason: 'Customer successfully applied for ID.', transcript: [], recordingUrl: '' },
-  { id: 'call_9820', agentName: 'Kredmint Support', duration: '45s', durationSeconds: 45, status: 'Failed', timestamp: '9:15 AM', date: new Date(Date.now() - 7200000), sentiment: 'Neutral', sentimentReason: 'Call dropped before product discussion.', transcript: [], recordingUrl: '' },
-];
+const LayoutDashboard = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>;
+const Users = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+const PhoneCall = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
+const SettingsIcon = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
+const Megaphone = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>;
+const Plus = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
+const Play = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" {...props}><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+const Pause = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" {...props}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>;
+const History = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 6v6l4 2"/></svg>;
+const Download = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
+const X = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>;
+const UploadIcon = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
+const Calendar = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>;
+const Trash = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>;
+const Edit = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>;
+const ArrowRight = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>;
+const ArrowLeft = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>;
+const FileAudio = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M17.5 19H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v11.5"/><path d="M6 8h2"/><path d="M6 12h2"/><path d="M6 16h2"/></svg>;
+const Server = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>;
+const Globe = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>;
+const Phone = (props: React.SVGProps<SVGSVGElement>) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
 
 type View = 'dashboard' | 'agents' | 'campaigns' | 'settings' | 'playground' | 'calls';
+
+interface SipTestModalData {
+    type: 'agent' | 'campaign';
+    id: string;
+    name: string;
+    agentId: string;
+}
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [activeAgent, setActiveAgent] = useState<Agent | null>(null);
-  const [agents, setAgents] = useState<Agent[]>(MOCK_AGENTS); 
-  const [callLogs, setCallLogs] = useState<CallLog[]>(INIT_LOGS);
-  const [campaigns, setCampaigns] = useState<Campaign[]>(MOCK_CAMPAIGNS);
+  const [agents, setAgents] = useState<Agent[]>([]); 
+  const [callLogs, setCallLogs] = useState<CallLog[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [sipConfig, setSipConfig] = useState<SipConfig | null>(null);
+
+  // Loading States
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSipTesting, setIsSipTesting] = useState(false);
+
+  // Modals & Selection
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
-  
-  // Agent Modal State
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+  
+  // Test Modal States
+  const [showWebTestModal, setShowWebTestModal] = useState(false); // Used in Campaign Creation
+  const [webTestCampaign, setWebTestCampaign] = useState<Campaign | null>(null); // Used in Campaigns List
+  const [sipTestModalData, setSipTestModalData] = useState<SipTestModalData | null>(null);
+  const [sipTestNumber, setSipTestNumber] = useState('');
+  
+  // Campaign Creation Test States
+  const [sipTestPhone, setSipTestPhone] = useState('');
+  const [showSipTestInput, setShowSipTestInput] = useState(false);
+  
+  // Delete States
+  const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
+  const [campaignToDelete, setCampaignToDelete] = useState<string | null>(null);
 
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([
-    { id: 'key_01', name: 'Production Key', key: 'sk-prod-••••••••', created: '2023-10-01', lastUsed: 'Just now' },
-    { id: 'key_02', name: 'Dev Key', key: 'sk-dev-••••••••', created: '2024-01-15', lastUsed: '2 days ago' }
-  ]);
+  // SIP Form State
+  const [sipForm, setSipForm] = useState<SipConfig>({
+      providerName: '', host: '', port: 5060, username: '', password: '', enabled: false, status: 'Disconnected'
+  });
 
   const apiKey = process.env.API_KEY || '';
+
+  // Initial Data Fetch
+  useEffect(() => {
+    const fetchData = async () => {
+        setIsLoading(true);
+        try {
+            const [ags, cmps, logs, keys, sip] = await Promise.all([
+                api.getAgents(),
+                api.getCampaigns(),
+                api.getCallLogs(),
+                api.getApiKeys(),
+                api.getSipConfig()
+            ]);
+            setAgents(ags);
+            setCampaigns(cmps);
+            setCallLogs(logs);
+            setApiKeys(keys);
+            setSipConfig(sip);
+            setSipForm(sip);
+        } catch (e) {
+            console.error("Failed to load data", e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    fetchData();
+  }, []);
 
   const handleTestAgent = (agent: Agent) => {
     setActiveAgent(agent);
     setCurrentView('playground');
   };
 
-  const handleSessionComplete = (log: CallLog) => {
-    setCallLogs(prev => [log, ...prev]);
+  const handleSessionComplete = async (log: CallLog) => {
+    const savedLog = await api.saveCallLog(log);
+    setCallLogs(prev => [savedLog, ...prev]);
   };
   
   const handleEditAgent = (agent: Agent) => {
@@ -106,26 +133,117 @@ const App: React.FC = () => {
   };
 
   const handleDeleteAgent = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this agent?")) {
-      setAgents(prev => prev.filter(a => a.id !== id));
+    setAgentToDelete(id);
+  };
+
+  const confirmDeleteAgent = async () => {
+    if (agentToDelete) {
+      await api.deleteAgent(agentToDelete);
+      setAgents(prev => prev.filter(a => a.id !== agentToDelete));
+      if (activeAgent?.id === agentToDelete) {
+        setActiveAgent(null);
+        if (currentView === 'playground') {
+            setCurrentView('agents');
+        }
+      }
+      setAgentToDelete(null);
     }
   };
 
-  const handleSaveAgent = () => {
-    if (editingAgent) {
-      setAgents(prev => {
-        const exists = prev.some(a => a.id === editingAgent.id);
-        if (exists) {
-           // Update existing
-           return prev.map(a => a.id === editingAgent.id ? editingAgent : a);
+  const handleDeleteCampaign = (id: string) => {
+    setCampaignToDelete(id);
+  };
+
+  const confirmDeleteCampaign = async () => {
+    if (campaignToDelete) {
+      await api.deleteCampaign(campaignToDelete);
+      setCampaigns(prev => prev.filter(c => c.id !== campaignToDelete));
+      setCampaignToDelete(null);
+    }
+  };
+
+  // --- Campaign Start/Stop (SIP Integration) ---
+  const handleToggleCampaign = async (id: string, currentStatus: string) => {
+     const action = currentStatus === 'Running' ? 'pause' : 'start';
+     const updated = await api.toggleCampaign(id, action);
+     
+     // Update UI state
+     setCampaigns(prev => prev.map(c => c.id === id ? updated : c));
+     
+     // Show SIP toast simulation
+     if (action === 'start') {
+        if (sipConfig?.enabled && sipConfig?.status === 'Connected') {
+            alert(`SIP Dialing Initiated via ${sipConfig.providerName}\n\nCalling leads from list...`);
+        } else if (sipConfig?.enabled) {
+            alert(`Checking SIP connection to ${sipConfig.host}...\nStarting Dialer...`);
         } else {
-           // Create new
-           return [...prev, editingAgent];
+             // Fallback or just standard simulation
         }
+     }
+  };
+
+  const handleSaveAgent = async () => {
+    if (editingAgent) {
+      const savedAgent = await api.saveAgent(editingAgent);
+      setAgents(prev => {
+        const exists = prev.some(a => a.id === savedAgent.id);
+        if (exists) return prev.map(a => a.id === savedAgent.id ? savedAgent : a);
+        return [...prev, savedAgent];
       });
       setShowAgentModal(false);
       setEditingAgent(null);
     }
+  };
+
+  // SIP Actions
+  const handleSaveSip = async () => {
+     setIsSipTesting(true);
+     await api.saveSipConfig(sipForm);
+     setSipConfig(sipForm);
+     setIsSipTesting(false);
+     alert("SIP Configuration Saved");
+  };
+
+  const handleTestSip = async () => {
+      setIsSipTesting(true);
+      const success = await api.testSipConnection();
+      setIsSipTesting(false);
+      setSipConfig(prev => prev ? { ...prev, status: success ? 'Connected' : 'Error' } : null);
+      setSipForm(prev => ({ ...prev, status: success ? 'Connected' : 'Error' }));
+      if (success) alert("SIP Connection Successful!");
+      else alert("SIP Connection Failed. Check credentials.");
+  };
+
+  const handleSipTestClick = (type: 'agent' | 'campaign', item: Agent | Campaign) => {
+      if (!sipConfig?.enabled) {
+          alert("SIP Trunking is disabled. Please enable it in Settings.");
+          return;
+      }
+      setSipTestModalData({
+          type,
+          id: item.id,
+          name: item.name,
+          agentId: type === 'agent' ? item.id : (item as Campaign).agentId
+      });
+      setSipTestNumber('');
+  };
+
+  const handleSipDial = async () => {
+      if (!sipTestModalData || !sipTestNumber) return;
+      setIsSipTesting(true);
+      try {
+          const res = await api.triggerSipTestCall(
+              sipTestNumber, 
+              sipTestModalData.name, 
+              sipTestModalData.agentId
+          );
+          alert(res.message);
+          setSipTestModalData(null);
+      } catch (e) {
+          alert("SIP Test Failed");
+      } finally {
+          setIsSipTesting(false);
+      }
   };
 
   // Campaign Form State
@@ -158,36 +276,25 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCampaignNext = () => {
-    if (!newCampaign.name || !newCampaign.agentId || !newCampaign.startDate || !newCampaign.file) {
-      alert("Please fill all required fields and upload a user list.");
-      return;
-    }
-    if (!newCampaign.agentPromptOverride.trim()) {
-      alert("Please provide an override prompt for the campaign agent.");
-      return;
-    }
-    setCampaignStep('summary');
+  const handleEditCampaign = (campaign: Campaign) => {
+    setEditingCampaignId(campaign.id);
+    setNewCampaign({
+      name: campaign.name,
+      frequency: campaign.frequency || 'daily',
+      scheduleTime: campaign.scheduleTime || '10:00',
+      startDate: campaign.startDate || '',
+      agentId: campaign.agentId,
+      file: null, // Keep file null, we'll use contactCount to show existing data
+      contactCount: campaign.totalLeads,
+      agentPromptOverride: campaign.agentPromptOverride || ''
+    });
+    setPreviewContacts(campaign.contactList || []);
+    setCampaignStep('form');
+    setShowCampaignModal(true);
   };
 
-  const createCampaign = () => {
-    const campaign: Campaign = {
-      id: `cmp_${Math.random().toString(36).substr(2, 5)}`,
-      name: newCampaign.name,
-      agentId: newCampaign.agentId,
-      status: 'Scheduled',
-      progress: 0,
-      totalLeads: newCampaign.contactCount,
-      connected: 0,
-      frequency: newCampaign.frequency,
-      scheduleTime: newCampaign.scheduleTime,
-      startDate: newCampaign.startDate,
-      agentPromptOverride: newCampaign.agentPromptOverride,
-      contactList: previewContacts
-    };
-
-    setCampaigns(prev => [campaign, ...prev]);
-    setShowCampaignModal(false);
+  const handleCreateCampaign = () => {
+    setEditingCampaignId(null);
     setNewCampaign({
       name: '',
       frequency: 'daily',
@@ -198,7 +305,68 @@ const App: React.FC = () => {
       contactCount: 0,
       agentPromptOverride: ''
     });
+    setPreviewContacts([]);
     setCampaignStep('form');
+    setShowCampaignModal(true);
+  };
+
+  const handleCampaignNext = () => {
+    if (!newCampaign.name || !newCampaign.agentId || !newCampaign.startDate) {
+      alert("Please fill all required fields (Name, Agent, Start Date).");
+      return;
+    }
+    // For edit mode, we might not need a file if contacts already exist
+    if (!newCampaign.file && newCampaign.contactCount === 0) {
+       alert("Please upload a user list.");
+       return;
+    }
+
+    if (!newCampaign.agentPromptOverride.trim()) {
+      alert("Please provide an override prompt for the campaign agent.");
+      return;
+    }
+    setCampaignStep('summary');
+  };
+
+  const handleSipTestDial = async () => {
+      if (!sipTestPhone.trim()) return;
+      setIsSipTesting(true);
+      try {
+          const res = await api.triggerSipTestCall(sipTestPhone, newCampaign.name, newCampaign.agentId);
+          alert(res.message);
+      } catch (e) {
+          alert("Test failed");
+      } finally {
+          setIsSipTesting(false);
+      }
+  };
+
+  const handleSaveCampaign = async () => {
+    const campaignData: Campaign = {
+      id: editingCampaignId || `cmp_${Math.random().toString(36).substr(2, 5)}`,
+      name: newCampaign.name,
+      agentId: newCampaign.agentId,
+      status: editingCampaignId ? campaigns.find(c => c.id === editingCampaignId)?.status || 'Scheduled' : 'Scheduled',
+      progress: editingCampaignId ? campaigns.find(c => c.id === editingCampaignId)?.progress || 0 : 0,
+      totalLeads: newCampaign.contactCount,
+      connected: editingCampaignId ? campaigns.find(c => c.id === editingCampaignId)?.connected || 0 : 0,
+      frequency: newCampaign.frequency,
+      scheduleTime: newCampaign.scheduleTime,
+      startDate: newCampaign.startDate,
+      agentPromptOverride: newCampaign.agentPromptOverride,
+      contactList: previewContacts
+    };
+
+    if (editingCampaignId) {
+      const updated = await api.updateCampaign(campaignData);
+      setCampaigns(prev => prev.map(c => c.id === updated.id ? updated : c));
+    } else {
+      const saved = await api.saveCampaign(campaignData);
+      setCampaigns(prev => [saved, ...prev]);
+    }
+
+    setShowCampaignModal(false);
+    setEditingCampaignId(null);
   };
 
   const stats = useMemo(() => {
@@ -231,10 +399,11 @@ const App: React.FC = () => {
     if (!call.recordingUrl) return;
     const a = document.createElement('a');
     a.href = call.recordingUrl;
-    // Guess extension based on browser - usually webm
     a.download = `recording-${call.id}.webm`;
     a.click();
   };
+
+  // --- Render Functions ---
 
   const renderDashboard = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -256,6 +425,27 @@ const App: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* SIP Trunk Status Widget */}
+      {sipConfig?.enabled && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                  <div className={`h-12 w-12 rounded-full flex items-center justify-center ${sipConfig.status === 'Connected' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                      <Server />
+                  </div>
+                  <div>
+                      <h3 className="font-semibold text-gray-900">SIP Trunk: {sipConfig.providerName || "Unknown Provider"}</h3>
+                      <p className="text-sm text-gray-500">{sipConfig.host}:{sipConfig.port} • {sipConfig.username}</p>
+                  </div>
+              </div>
+              <div className="text-right">
+                  <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${sipConfig.status === 'Connected' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                      <span className={`h-2 w-2 rounded-full mr-2 ${sipConfig.status === 'Connected' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                      {sipConfig.status}
+                  </div>
+              </div>
+          </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -293,6 +483,128 @@ const App: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+
+  const renderSettings = () => (
+     <div className="max-w-4xl space-y-8 animate-in fade-in duration-500">
+        {/* SIP Settings */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm relative overflow-hidden">
+           <div className="absolute top-0 right-0 p-4 opacity-5">
+              <Server />
+           </div>
+           <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+             <Server /> Telephony & SIP Trunking
+           </h2>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="md:col-span-2">
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Provider Name</label>
+                 <input 
+                   type="text" 
+                   value={sipForm.providerName}
+                   onChange={e => setSipForm({...sipForm, providerName: e.target.value})}
+                   placeholder="e.g. Twilio Elastic SIP, SignalWire, Asterisk"
+                   className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none"
+                 />
+              </div>
+              <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">SIP Domain / Host IP</label>
+                 <input 
+                   type="text" 
+                   value={sipForm.host}
+                   onChange={e => setSipForm({...sipForm, host: e.target.value})}
+                   placeholder="sip.provider.com"
+                   className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none font-mono text-sm"
+                 />
+              </div>
+              <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                 <input 
+                   type="number" 
+                   value={sipForm.port}
+                   onChange={e => setSipForm({...sipForm, port: parseInt(e.target.value)})}
+                   placeholder="5060"
+                   className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none font-mono text-sm"
+                 />
+              </div>
+              <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Username / Extension</label>
+                 <input 
+                   type="text" 
+                   value={sipForm.username}
+                   onChange={e => setSipForm({...sipForm, username: e.target.value})}
+                   className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none font-mono text-sm"
+                 />
+              </div>
+              <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Password / Secret</label>
+                 <input 
+                   type="password" 
+                   value={sipForm.password}
+                   onChange={e => setSipForm({...sipForm, password: e.target.value})}
+                   className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none font-mono text-sm"
+                 />
+              </div>
+           </div>
+
+           <div className="flex items-center justify-between pt-6 border-t border-gray-100">
+               <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    id="enableSip"
+                    checked={sipForm.enabled}
+                    onChange={e => setSipForm({...sipForm, enabled: e.target.checked})}
+                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  />
+                  <label htmlFor="enableSip" className="text-sm font-medium text-gray-700">Enable SIP Trunking for Outbound Campaigns</label>
+               </div>
+               <div className="flex gap-3">
+                  <button 
+                     onClick={handleTestSip}
+                     disabled={isSipTesting}
+                     className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition flex items-center gap-2 disabled:opacity-50"
+                  >
+                     {isSipTesting ? (
+                       <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                     ) : (
+                        <PhoneCall className="w-4 h-4" /> 
+                     )}
+                     Test Connection
+                  </button>
+                  <button 
+                     onClick={handleSaveSip}
+                     className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-sm transition"
+                  >
+                     Save Configuration
+                  </button>
+               </div>
+           </div>
+        </div>
+
+        {/* API Keys */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
+          <h2 className="text-xl font-bold text-gray-900 mb-6">API Key Management</h2>
+          <div className="space-y-4">
+             {apiKeys.map(key => (
+               <div key={key.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <p className="font-medium text-gray-900">{key.name}</p>
+                    <p className="text-sm text-gray-500 font-mono mt-1">{key.key}</p>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                     <span>Last used: {key.lastUsed}</span>
+                     <button className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded">
+                       <Trash />
+                     </button>
+                  </div>
+               </div>
+             ))}
+             <button className="w-full py-3 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:text-blue-600 hover:border-blue-500 hover:bg-blue-50 transition flex items-center justify-center gap-2">
+                <Plus /> Generate New Key
+             </button>
+          </div>
+        </div>
+     </div>
   );
 
   const renderCampaignForm = () => (
@@ -382,7 +694,11 @@ const App: React.FC = () => {
            />
            <div className="text-gray-400 mb-2"><UploadIcon /></div>
            <p className="mt-2 text-sm text-gray-600">{newCampaign.file ? newCampaign.file.name : "Drag & drop or click to upload"}</p>
-           {newCampaign.contactCount > 0 && (
+           {/* Show existing count if editing and no new file selected */}
+           {!newCampaign.file && newCampaign.contactCount > 0 && (
+             <p className="text-xs text-blue-600 mt-1">Using existing list ({newCampaign.contactCount} contacts). Upload new file to replace.</p>
+           )}
+           {newCampaign.file && newCampaign.contactCount > 0 && (
               <p className="text-xs text-green-600 mt-1">{newCampaign.contactCount} contacts found</p>
            )}
         </div>
@@ -416,6 +732,63 @@ const App: React.FC = () => {
               <p className="text-gray-500">Total Contacts</p>
               <p className="font-medium text-green-600">{newCampaign.contactCount}</p>
             </div>
+            
+            {/* SIP Info in Summary */}
+            {sipConfig?.enabled && (
+               <div className="col-span-2 mt-2 pt-2 border-t border-gray-200">
+                  <p className="text-gray-500 flex items-center gap-2">
+                     <Server className="w-3 h-3" /> Dialing via SIP
+                  </p>
+                  <p className="font-medium text-gray-900">{sipConfig.providerName} ({sipConfig.host})</p>
+               </div>
+            )}
+         </div>
+
+         {/* Test Campaign Section */}
+         <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+               Test Campaign Configuration
+            </h4>
+            <div className="flex flex-col sm:flex-row gap-4">
+                <button 
+                   onClick={() => setShowWebTestModal(true)}
+                   className="flex-1 py-2 px-3 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50 transition flex items-center justify-center gap-2"
+                >
+                   <Globe className="w-4 h-4" /> Web Test (Browser)
+                </button>
+                <div className="flex-1 flex gap-2">
+                   {!showSipTestInput ? (
+                       <button 
+                         onClick={() => setShowSipTestInput(true)}
+                         disabled={!sipConfig?.enabled}
+                         className="w-full py-2 px-3 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-gray-50 disabled:border-gray-200 disabled:text-gray-400"
+                       >
+                          <Phone className="w-4 h-4" /> SIP Test Call
+                       </button>
+                   ) : (
+                       <div className="flex w-full gap-2 animate-in fade-in duration-200">
+                          <input 
+                            type="text" 
+                            value={sipTestPhone}
+                            onChange={e => setSipTestPhone(e.target.value)}
+                            placeholder="+123..."
+                            className="flex-1 min-w-0 border border-blue-300 rounded px-2 py-1 text-sm outline-none"
+                          />
+                          <button 
+                            onClick={handleSipTestDial}
+                            disabled={isSipTesting}
+                            className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                          >
+                             {isSipTesting ? '...' : 'Dial'}
+                          </button>
+                       </div>
+                   )}
+                </div>
+            </div>
+            {!sipConfig?.enabled && (
+                <p className="text-[10px] text-gray-500 mt-2 italic">* SIP Testing requires SIP Trunking to be enabled in settings.</p>
+            )}
          </div>
 
          <div>
@@ -436,12 +809,16 @@ const App: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {previewContacts.map((c, i) => (
+                    {previewContacts.length > 0 ? previewContacts.map((c, i) => (
                       <tr key={i} className="bg-white">
                         <td className="px-3 py-2 text-gray-900">{c.name}</td>
                         <td className="px-3 py-2 text-gray-500">{c.phone}</td>
                       </tr>
-                    ))}
+                    )) : (
+                        <tr className="bg-white">
+                            <td colSpan={2} className="px-3 py-4 text-center text-gray-400 italic">No contacts loaded.</td>
+                        </tr>
+                    )}
                   </tbody>
                </table>
             </div>
@@ -515,10 +892,15 @@ const App: React.FC = () => {
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-8 scrollbar-hide">
-          
-          {currentView === 'dashboard' && renderDashboard()}
+          {isLoading && (
+              <div className="flex h-full items-center justify-center text-gray-400">
+                  Loading system data...
+              </div>
+          )}
 
-          {currentView === 'agents' && (
+          {!isLoading && currentView === 'dashboard' && renderDashboard()}
+
+          {!isLoading && currentView === 'agents' && (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                <div className="flex justify-between items-center">
                   <h2 className="text-xl font-bold text-gray-900">Your Agents</h2>
@@ -531,17 +913,26 @@ const App: React.FC = () => {
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                {agents.map(agent => (
-                 <div key={agent.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-blue-300 transition group shadow-sm">
-                    <div className="p-6">
+                 <div key={agent.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-blue-300 transition group shadow-sm flex flex-col h-full">
+                    <div className="p-6 flex-1">
                       <div className="flex justify-between items-start mb-4">
                         <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${agent.type === 'Inbound' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
                            <Users />
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => handleEditAgent(agent)} className="p-2 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition border border-gray-200" title="Edit Agent">
+                          <button onClick={(e) => { e.stopPropagation(); handleEditAgent(agent); }} className="p-2 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition border border-gray-200" title="Edit Agent">
                              <Edit />
                           </button>
-                          <button onClick={() => handleDeleteAgent(agent.id)} className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition border border-gray-200" title="Delete Agent">
+                          <button 
+                            type="button"
+                            onClick={(e) => { 
+                              e.preventDefault();
+                              e.stopPropagation(); 
+                              handleDeleteAgent(agent.id); 
+                            }} 
+                            className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition border border-gray-200" 
+                            title="Delete Agent"
+                          >
                              <Trash />
                           </button>
                           <span className={`text-xs px-2 py-2 rounded-lg border flex items-center ${agent.status === 'Active' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
@@ -563,11 +954,20 @@ const App: React.FC = () => {
                       <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-600 font-mono mb-6 line-clamp-3 border border-gray-100">
                         {agent.systemInstruction}
                       </div>
+                    </div>
+                    {/* Actions Footer */}
+                    <div className="p-4 bg-gray-50 border-t border-gray-200 flex gap-2">
                       <button 
                         onClick={() => handleTestAgent(agent)}
-                        className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                        className="flex-1 py-2 bg-white hover:bg-blue-50 text-blue-700 border border-gray-200 hover:border-blue-200 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 shadow-sm"
                       >
-                        <Play /> Test Agent
+                        <Globe className="w-4 h-4" /> Web Test
+                      </button>
+                      <button 
+                         onClick={() => handleSipTestClick('agent', agent)}
+                         className="flex-1 py-2 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        <Phone className="w-4 h-4" /> SIP Test
                       </button>
                     </div>
                  </div>
@@ -576,7 +976,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {currentView === 'playground' && activeAgent && (
+          {!isLoading && currentView === 'playground' && activeAgent && (
              <div className="h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <VoiceAgent 
                   apiKey={apiKey}
@@ -589,15 +989,12 @@ const App: React.FC = () => {
              </div>
           )}
 
-          {currentView === 'campaigns' && (
+          {!isLoading && currentView === 'campaigns' && (
             <div className="space-y-6 animate-in fade-in duration-500">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-bold text-gray-900">Active Campaigns</h2>
                 <button 
-                  onClick={() => {
-                    setShowCampaignModal(true);
-                    setCampaignStep('form');
-                  }}
+                  onClick={handleCreateCampaign}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium flex items-center gap-2 transition shadow-sm"
                 >
                   <Plus /> Create Campaign
@@ -613,6 +1010,7 @@ const App: React.FC = () => {
                       <th className="px-6 py-4">Schedule</th>
                       <th className="px-6 py-4">Progress</th>
                       <th className="px-6 py-4 text-right">Leads</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -643,6 +1041,66 @@ const App: React.FC = () => {
                           <div className="text-xs text-gray-400 mt-1">{cmp.progress}%</div>
                         </td>
                         <td className="px-6 py-4 text-right text-gray-600">{cmp.totalLeads.toLocaleString()}</td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                             {/* New Test Buttons */}
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); setWebTestCampaign(cmp); }}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition border border-transparent hover:border-blue-100"
+                                title="Web Browser Test"
+                            >
+                                <Globe className="w-4 h-4" />
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); handleSipTestClick('campaign', cmp); }}
+                                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition border border-transparent hover:border-gray-200"
+                                title="SIP Dial Test"
+                            >
+                                <Phone className="w-4 h-4" />
+                            </button>
+                            
+                            <div className="w-px h-6 bg-gray-200 mx-1"></div>
+
+                            {/* Edit Button */}
+                             <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditCampaign(cmp);
+                              }}
+                              className="p-2 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition border border-gray-200"
+                              title="Edit Campaign"
+                            >
+                               <Edit />
+                            </button>
+
+                            {/* Toggle Start/Pause */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleCampaign(cmp.id, cmp.status);
+                              }}
+                              className={`p-2 rounded-lg transition border border-gray-200 ${
+                                cmp.status === 'Running' 
+                                  ? 'text-orange-500 hover:text-orange-600 bg-orange-50 hover:bg-orange-100' 
+                                  : 'text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100'
+                              }`}
+                              title={cmp.status === 'Running' ? "Pause Campaign" : "Start Campaign"}
+                            >
+                               {cmp.status === 'Running' ? <Pause /> : <Play />}
+                            </button>
+
+                            <button 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteCampaign(cmp.id);
+                                }}
+                                className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition border border-gray-200"
+                                title="Delete Campaign"
+                            >
+                                <Trash />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -651,7 +1109,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {currentView === 'calls' && (
+          {!isLoading && currentView === 'calls' && (
              <div className="space-y-6 animate-in fade-in duration-500">
                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                   <table className="w-full text-left">
@@ -701,36 +1159,264 @@ const App: React.FC = () => {
              </div>
           )}
 
-          {currentView === 'settings' && (
-             <div className="max-w-4xl space-y-8 animate-in fade-in duration-500">
-                <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
-                  <h2 className="text-xl font-bold text-gray-900 mb-6">API Key Management</h2>
-                  <div className="space-y-4">
-                     {apiKeys.map(key => (
-                       <div key={key.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                          <div>
-                            <p className="font-medium text-gray-900">{key.name}</p>
-                            <p className="text-sm text-gray-500 font-mono mt-1">{key.key}</p>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
-                             <span>Last used: {key.lastUsed}</span>
-                             <button className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded">
-                               <Trash />
-                             </button>
-                          </div>
-                       </div>
-                     ))}
-                     <button className="w-full py-3 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:text-blue-600 hover:border-blue-500 hover:bg-blue-50 transition flex items-center justify-center gap-2">
-                        <Plus /> Generate New Key
-                     </button>
-                  </div>
-                </div>
-             </div>
-          )}
+          {!isLoading && currentView === 'settings' && renderSettings()}
         </div>
       </main>
 
       {/* --- Modals --- */}
+      
+      {/* Web Test Modal (Campaign Creation Flow) */}
+      {showWebTestModal && (
+         <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl w-full max-w-5xl h-[85vh] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden relative flex flex-col">
+                <div className="absolute top-4 right-4 z-10">
+                   <button onClick={() => setShowWebTestModal(false)} className="bg-white/90 p-2 rounded-full hover:bg-white text-gray-600 hover:text-gray-900 shadow-sm border border-gray-200">
+                      <X />
+                   </button>
+                </div>
+                <div className="flex-1">
+                   {/* We re-use VoiceAgent but passed with the Campaign Override Settings */}
+                   <VoiceAgent 
+                      apiKey={apiKey}
+                      agentName={`${newCampaign.name} (Test)`}
+                      // Use the selected Agent's initial message
+                      initialMessage={agents.find(a => a.id === newCampaign.agentId)?.initialMessage}
+                      // STRICTLY use the Campaign Override Prompt as the system instruction
+                      systemInstruction={newCampaign.agentPromptOverride}
+                      onClose={() => setShowWebTestModal(false)}
+                   />
+                </div>
+            </div>
+         </div>
+      )}
+
+      {/* Web Test Modal (Campaigns List View) */}
+      {webTestCampaign && (
+         <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl w-full max-w-5xl h-[85vh] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden relative flex flex-col">
+                <div className="absolute top-4 right-4 z-10">
+                   <button onClick={() => setWebTestCampaign(null)} className="bg-white/90 p-2 rounded-full hover:bg-white text-gray-600 hover:text-gray-900 shadow-sm border border-gray-200">
+                      <X />
+                   </button>
+                </div>
+                <div className="flex-1">
+                   <VoiceAgent 
+                      apiKey={apiKey}
+                      agentName={`${webTestCampaign.name} (Test)`}
+                      initialMessage={agents.find(a => a.id === webTestCampaign.agentId)?.initialMessage}
+                      systemInstruction={webTestCampaign.agentPromptOverride || agents.find(a => a.id === webTestCampaign.agentId)?.systemInstruction}
+                      onClose={() => setWebTestCampaign(null)}
+                      onSessionComplete={handleSessionComplete}
+                   />
+                </div>
+            </div>
+         </div>
+      )}
+
+      {/* SIP Test Modal (Generic for Agent or Campaign) */}
+      {sipTestModalData && (
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-xl border border-gray-200 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 p-6">
+              <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">SIP Test Call</h3>
+                    <p className="text-sm text-gray-500">Testing {sipTestModalData.type}: {sipTestModalData.name}</p>
+                  </div>
+                  <button onClick={() => setSipTestModalData(null)} className="text-gray-400 hover:text-gray-700"><X /></button>
+              </div>
+              
+              <div className="space-y-4">
+                  <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Enter Phone Number</label>
+                      <input 
+                         type="tel"
+                         value={sipTestNumber}
+                         onChange={e => setSipTestNumber(e.target.value)}
+                         placeholder="+1 (555) 000-0000"
+                         className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
+                         autoFocus
+                      />
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-800 border border-blue-100">
+                      Calling via: <strong>{sipConfig?.providerName}</strong><br/>
+                      Host: {sipConfig?.host}
+                  </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                 <button 
+                   onClick={() => setSipTestModalData(null)} 
+                   className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={handleSipDial} 
+                   disabled={isSipTesting || !sipTestNumber}
+                   className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium shadow-sm transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                   {isSipTesting ? 'Dialing...' : (
+                       <><Phone className="w-4 h-4" /> Dial Now</>
+                   )}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+      
+      {/* Agent Delete Confirmation Modal */}
+      {agentToDelete && (
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-xl border border-gray-200 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Agent?</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete this agent? This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3">
+                 <button 
+                   onClick={() => setAgentToDelete(null)} 
+                   className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={confirmDeleteAgent} 
+                   className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium shadow-sm transition"
+                 >
+                   Delete
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Campaign Delete Confirmation Modal */}
+      {campaignToDelete && (
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-xl border border-gray-200 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Campaign?</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete this campaign? This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3">
+                 <button 
+                   onClick={() => setCampaignToDelete(null)} 
+                   className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={confirmDeleteCampaign} 
+                   className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium shadow-sm transition"
+                 >
+                   Delete
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Call Details Modal (with Playback) */}
+      {selectedCall && (
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-gray-200 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
+              <div>
+                 <h3 className="text-lg font-bold text-gray-900">Call Details</h3>
+                 <p className="text-sm text-gray-500">{selectedCall.agentName} • {selectedCall.timestamp}</p>
+              </div>
+              <button onClick={() => setSelectedCall(null)} className="text-gray-400 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100"><X /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+               {/* Metadata Grid */}
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                     <p className="text-xs text-gray-500 uppercase font-semibold">Status</p>
+                     <span className={`inline-block mt-1 px-2 py-1 text-xs rounded-full font-medium ${selectedCall.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                       {selectedCall.status}
+                     </span>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                     <p className="text-xs text-gray-500 uppercase font-semibold">Duration</p>
+                     <p className="text-sm font-medium text-gray-900 mt-1">{selectedCall.duration}</p>
+                  </div>
+                  <div className="col-span-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                     <div className="flex justify-between items-center mb-1">
+                       <p className="text-xs text-gray-500 uppercase font-semibold">Sentiment Analysis</p>
+                       <span className={`text-xs px-2 py-0.5 rounded font-medium ${selectedCall.sentiment === 'Positive' ? 'bg-green-100 text-green-700' : selectedCall.sentiment === 'Negative' ? 'bg-red-100 text-red-700' : 'bg-gray-200 text-gray-700'}`}>
+                         {selectedCall.sentiment}
+                       </span>
+                     </div>
+                     <p className="text-sm text-gray-700 italic">"{selectedCall.sentimentReason}"</p>
+                  </div>
+               </div>
+               
+               {/* Audio Player */}
+               {selectedCall.recordingUrl ? (
+                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                       <FileAudio className="w-4 h-4" /> Call Recording
+                    </h4>
+                    <audio controls className="w-full h-8 mb-2">
+                       <source src={selectedCall.recordingUrl} type="audio/webm" />
+                       Your browser does not support the audio element.
+                    </audio>
+                    <div className="flex justify-end">
+                       <button 
+                         onClick={() => downloadRecording(selectedCall)}
+                         className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 hover:underline"
+                       >
+                         <Download className="w-3 h-3" /> Download Audio
+                       </button>
+                    </div>
+                 </div>
+               ) : (
+                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 text-center text-sm text-gray-500 italic">
+                    No audio recording available for this call.
+                 </div>
+               )}
+
+               {/* Transcript */}
+               <div>
+                  <div className="flex justify-between items-center mb-3">
+                     <h4 className="text-sm font-semibold text-gray-900">Transcript</h4>
+                     <button 
+                       onClick={() => downloadTranscript(selectedCall)}
+                       className="text-xs flex items-center gap-1 text-gray-500 hover:text-blue-600 transition"
+                     >
+                       <Download className="w-3 h-3" /> Download Text
+                     </button>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 max-h-60 overflow-y-auto space-y-3 text-sm">
+                     {selectedCall.transcript.length === 0 ? (
+                        <p className="text-gray-400 italic text-center">No transcript generated.</p>
+                     ) : (
+                        selectedCall.transcript.map((msg, idx) => (
+                           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                                 msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-800'
+                              }`}>
+                                 <p>{msg.text}</p>
+                              </div>
+                           </div>
+                        ))
+                     )}
+                  </div>
+               </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 flex justify-end">
+               <button 
+                 onClick={() => setSelectedCall(null)}
+                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition"
+               >
+                 Close
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Agent Edit Modal */}
       {showAgentModal && editingAgent && (
@@ -754,7 +1440,29 @@ const App: React.FC = () => {
                        />
                     </div>
                     <div>
-                       <label className="block text-sm font-medium text-gray-700 mb-1">Voice Persona</label>
+                       <label className="block text-sm font-medium text-gray-700 mb-1">Agent Type</label>
+                       <select 
+                         value={editingAgent.type}
+                         onChange={e => setEditingAgent({...editingAgent, type: e.target.value as any})}
+                         className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none"
+                       >
+                         <option value="Inbound">Inbound</option>
+                         <option value="Outbound">Outbound</option>
+                       </select>
+                    </div>
+                    <div>
+                       <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                       <select 
+                         value={editingAgent.status}
+                         onChange={e => setEditingAgent({...editingAgent, status: e.target.value as any})}
+                         className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none"
+                       >
+                         <option value="Active">Active</option>
+                         <option value="Inactive">Inactive</option>
+                       </select>
+                    </div>
+                    <div>
+                       <label className="block text-sm font-medium text-gray-700 mb-1">Voice</label>
                        <select 
                          value={editingAgent.voice}
                          onChange={e => setEditingAgent({...editingAgent, voice: e.target.value})}
@@ -764,183 +1472,101 @@ const App: React.FC = () => {
                          <option value="Puck">Puck</option>
                          <option value="Fenrir">Fenrir</option>
                          <option value="Charon">Charon</option>
-                         <option value="Aoede">Aoede</option>
+                         <option value="Zephyr">Zephyr</option>
                        </select>
                     </div>
                  </div>
                  
                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Initial Message</label>
-                    <p className="text-xs text-gray-500 mb-2">The very first thing the bot will say when the call connects.</p>
-                    <textarea 
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Initial Greeting</label>
+                    <input 
+                      type="text"
                       value={editingAgent.initialMessage || ''}
                       onChange={e => setEditingAgent({...editingAgent, initialMessage: e.target.value})}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none h-20 resize-none"
                       placeholder="e.g. Hello, thanks for calling Kredmint..."
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 outline-none"
                     />
                  </div>
 
                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Agent Instructions (System Prompt)</label>
-                    <p className="text-xs text-gray-500 mb-2">Define the bot's behavior, knowledge base, and tone.</p>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">System Instructions</label>
                     <textarea 
                       value={editingAgent.systemInstruction}
                       onChange={e => setEditingAgent({...editingAgent, systemInstruction: e.target.value})}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 outline-none h-48 font-mono text-sm"
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 outline-none h-32 font-mono text-sm resize-none"
+                      placeholder="Define the agent's persona and knowledge base..."
                     />
                  </div>
               </div>
               <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
-                 <button onClick={() => setShowAgentModal(false)} className="px-4 py-2 text-gray-600 hover:text-gray-900">Cancel</button>
-                 <button onClick={handleSaveAgent} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg shadow-blue-500/20">
-                    Save Changes
+                 <button 
+                   onClick={() => setShowAgentModal(false)}
+                   className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={handleSaveAgent}
+                   className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-sm transition"
+                 >
+                   Save Agent
                  </button>
               </div>
             </div>
          </div>
       )}
 
-      {/* Campaign Creation Modal */}
+      {/* Campaign Create Modal */}
       {showCampaignModal && (
         <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-gray-200 w-full max-w-lg shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-gray-900">
-                {campaignStep === 'form' ? 'Create New Campaign' : 'Confirm Campaign'}
-              </h3>
-              <button onClick={() => setShowCampaignModal(false)} className="text-gray-400 hover:text-gray-700"><X /></button>
-            </div>
-            
-            {campaignStep === 'form' ? renderCampaignForm() : renderCampaignSummary()}
-
-            <div className="p-6 border-t border-gray-200 flex justify-between items-center">
-               <button 
-                  onClick={() => setShowCampaignModal(false)} 
-                  className="px-4 py-2 text-gray-600 hover:text-gray-900"
-               >
-                 Cancel
-               </button>
-               
-               <div className="flex gap-3">
+           <div className="bg-white rounded-xl border border-gray-200 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+                 <h3 className="text-lg font-bold text-gray-900">
+                    {editingCampaignId 
+                       ? 'Edit Campaign' 
+                       : (campaignStep === 'form' ? 'Create New Campaign' : 'Review Campaign')
+                    }
+                 </h3>
+                 <button onClick={() => setShowCampaignModal(false)} className="text-gray-400 hover:text-gray-700"><X /></button>
+              </div>
+              
+              {campaignStep === 'form' ? renderCampaignForm() : renderCampaignSummary()}
+              
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
                  {campaignStep === 'summary' && (
                    <button 
                      onClick={() => setCampaignStep('form')}
-                     className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 flex items-center gap-2"
+                     className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
                    >
-                     <ArrowLeft /> Edit
+                     Back
                    </button>
                  )}
-                 
+                 <button 
+                   onClick={() => setShowCampaignModal(false)}
+                   className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                 >
+                   Cancel
+                 </button>
                  {campaignStep === 'form' ? (
-                   <button 
-                     onClick={handleCampaignNext}
-                     className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg shadow-blue-500/20 flex items-center gap-2"
-                   >
-                     Next <ArrowRight />
-                   </button>
-                 ) : (
-                   <button 
-                     onClick={createCampaign}
-                     className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium shadow-lg shadow-green-500/20 flex items-center gap-2"
-                   >
-                     <Megaphone /> Confirm & Start
-                   </button>
-                 )}
-               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Call Details Modal */}
-      {selectedCall && (
-        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-           <div className="bg-white rounded-xl border border-gray-200 w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
-              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
-                 <div>
-                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-3">
-                       Call Details <span className="text-sm font-normal text-gray-500 font-mono">#{selectedCall.id}</span>
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-1">{selectedCall.date.toLocaleString()}</p>
-                 </div>
-                 <button onClick={() => setSelectedCall(null)} className="text-gray-400 hover:text-gray-700"><X /></button>
-              </div>
-              
-              <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-                 {/* Sidebar Info */}
-                 <div className="w-full md:w-72 bg-gray-50 border-r border-gray-200 p-6 space-y-6 overflow-y-auto">
-                    <div>
-                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Outcome</h4>
-                       <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${selectedCall.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{selectedCall.status}</span>
-                          <span className="text-gray-500 text-sm">{selectedCall.duration}</span>
-                       </div>
-                    </div>
-
-                    <div>
-                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sentiment Analysis</h4>
-                       <div className={`p-3 rounded-lg border ${
-                          selectedCall.sentiment === 'Positive' ? 'bg-green-50 border-green-200' : 
-                          selectedCall.sentiment === 'Negative' ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'
-                       }`}>
-                          <div className={`font-medium mb-1 ${
-                             selectedCall.sentiment === 'Positive' ? 'text-green-700' : 
-                             selectedCall.sentiment === 'Negative' ? 'text-red-700' : 'text-gray-700'
-                          }`}>
-                            {selectedCall.sentiment}
-                          </div>
-                          <p className="text-xs text-gray-600 leading-relaxed">{selectedCall.sentimentReason || "No detailed analysis available."}</p>
-                       </div>
-                    </div>
-
-                    <div>
-                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recording</h4>
-                       {selectedCall.recordingUrl ? (
-                         <>
-                           <audio controls src={selectedCall.recordingUrl} className="w-full h-8 mt-1" />
-                           <button 
-                             onClick={() => downloadRecording(selectedCall)}
-                             className="w-full mt-2 py-1.5 border border-gray-300 rounded text-xs text-gray-600 hover:bg-gray-100 flex items-center justify-center gap-2 transition"
-                           >
-                             <FileAudio /> Download Audio
-                           </button>
-                         </>
-                       ) : (
-                         <p className="text-xs text-gray-500 italic">No recording available</p>
-                       )}
-                    </div>
-                    
                     <button 
-                      onClick={() => downloadTranscript(selectedCall)}
-                      className="w-full py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 flex items-center justify-center gap-2 transition"
+                      onClick={handleCampaignNext}
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-sm transition flex items-center gap-2"
                     >
-                      <Download /> Download Transcript
+                      Next <ArrowRight />
                     </button>
-                 </div>
-
-                 {/* Transcript */}
-                 <div className="flex-1 p-6 overflow-y-auto bg-white">
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4 sticky top-0 bg-white py-2">Conversation Log</h4>
-                    <div className="space-y-4">
-                       {selectedCall.transcript.length === 0 && <p className="text-gray-500 italic text-sm">No transcript available for this call.</p>}
-                       {selectedCall.transcript.map((msg, i) => (
-                          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                             <div className={`max-w-[80%] rounded-2xl p-4 text-sm leading-relaxed ${
-                                msg.role === 'user' 
-                                  ? 'bg-blue-600 text-white rounded-tr-none' 
-                                  : 'bg-gray-100 text-gray-800 border border-gray-200 rounded-tl-none'
-                             }`}>
-                                <p>{msg.text}</p>
-                                <p className={`text-[10px] mt-2 opacity-50 ${msg.role === 'user' ? 'text-blue-100' : 'text-gray-400'}`}>{msg.timestamp}</p>
-                             </div>
-                          </div>
-                       ))}
-                    </div>
-                 </div>
+                 ) : (
+                    <button 
+                      onClick={handleSaveCampaign}
+                      className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium shadow-sm transition flex items-center gap-2"
+                    >
+                      <Megaphone className="w-4 h-4" /> {editingCampaignId ? 'Update Campaign' : 'Launch Campaign'}
+                    </button>
+                 )}
               </div>
            </div>
         </div>
       )}
+
     </div>
   );
 };

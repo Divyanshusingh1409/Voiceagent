@@ -56,7 +56,6 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
   
   // Latency & Filler State
   const [latencyStatus, setLatencyStatus] = useState<'idle' | 'listening' | 'processing' | 'filler'>('idle');
-  const turnEndTimestampRef = useRef<number>(0);
   const fillerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Transcription State
@@ -77,6 +76,17 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const startTimeRef = useRef<number>(0);
+
+  // Safe close helper
+  const closeAudioContext = async (ctx: AudioContext | null) => {
+    if (ctx && ctx.state !== 'closed') {
+      try {
+        await ctx.close();
+      } catch (e) {
+        console.warn("Failed to close audio context:", e);
+      }
+    }
+  };
 
   // Helper: Perform "Backend" Sentiment Analysis
   const analyzeSentiment = async (transcript: ChatMessage[]): Promise<{ sentiment: 'Positive' | 'Negative' | 'Neutral', reason: string }> => {
@@ -122,6 +132,11 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
   };
 
   const connectToGemini = async () => {
+    if (!apiKey) {
+      setError("API Key is missing.");
+      return;
+    }
+
     setError(null);
     setRealtimeTranscript([]);
     transcriptRef.current = [];
@@ -131,8 +146,9 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
     try {
       const ai = new GoogleGenAI({ apiKey });
       
-      inputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-      outputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      inputContextRef.current = new AudioContextClass({ sampleRate: 16000 });
+      outputContextRef.current = new AudioContextClass({ sampleRate: 24000 });
 
       // Setup Analysis
       analyserRef.current = outputContextRef.current!.createAnalyser();
@@ -188,8 +204,8 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
           systemInstruction: effectiveInstructions,
-          inputAudioTranscription: { model: "gemini-2.5-flash-native-audio-preview-09-2025" },
-          outputAudioTranscription: { model: "gemini-2.5-flash-native-audio-preview-09-2025" },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
           tools: [{ functionDeclarations: [logInquiryDeclaration] }],
         },
         callbacks: {
@@ -198,16 +214,18 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
             setIsConnected(true);
             
             // Setup Mic for API (using input context 16kHz)
-            const source = inputContextRef.current!.createMediaStreamSource(stream);
-            const processor = inputContextRef.current!.createScriptProcessor(4096, 1, 1);
-            processorRef.current = processor;
-            processor.onaudioprocess = (e) => {
-              const inputData = e.inputBuffer.getChannelData(0);
-              const pcmBlob = createBlob(inputData, 16000);
-              sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
-            };
-            source.connect(processor);
-            processor.connect(inputContextRef.current!.destination);
+            if (inputContextRef.current && streamRef.current) {
+                const source = inputContextRef.current.createMediaStreamSource(streamRef.current);
+                const processor = inputContextRef.current.createScriptProcessor(4096, 1, 1);
+                processorRef.current = processor;
+                processor.onaudioprocess = (e) => {
+                  const inputData = e.inputBuffer.getChannelData(0);
+                  const pcmBlob = createBlob(inputData, 16000);
+                  sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
+                };
+                source.connect(processor);
+                processor.connect(inputContextRef.current.destination);
+            }
           },
           onmessage: async (message: LiveServerMessage) => {
             // Latency Logic: Response Received
@@ -222,7 +240,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
 
             // Handle Audio Output
             const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (audioData && outputContextRef.current) {
+            if (audioData && outputContextRef.current && outputContextRef.current.state !== 'closed') {
                const ctx = outputContextRef.current;
                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
                const audioBuffer = await decodeAudioData(decode(audioData), ctx, 24000, 1);
@@ -238,11 +256,6 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
             // Handle Transcription
             const inputTrans = message.serverContent?.inputTranscription?.text;
             const outputTrans = message.serverContent?.outputTranscription?.text;
-
-            // Turn Handling for Latency Logic
-            if (message.serverContent?.turnComplete) {
-               // User finished speaking (or model finished turn, but usually indicates interaction point)
-            }
             
             if (inputTrans) {
                // User just spoke. Start the "Filler" timer.
@@ -252,8 +265,6 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
                // 1.5s Threshold for Filler
                fillerTimeoutRef.current = setTimeout(() => {
                   setLatencyStatus('filler');
-                  // In a real backend, we would inject audio here.
-                  // For now, the UI will show "Speaking filler..."
                }, 1500);
             }
 
@@ -310,8 +321,8 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
              setIsConnected(false);
           },
           onerror: (err) => {
-            console.error(err);
-            setError("Connection error");
+            console.error("Live API Error:", err);
+            setError("Connection disrupted. Please try again.");
             setIsConnected(false);
           }
         }
@@ -328,11 +339,12 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
     let audioUrl = '';
     
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      await new Promise<void>(resolve => {
+      const stopPromise = new Promise<void>(resolve => {
         if (!mediaRecorderRef.current) return resolve();
         mediaRecorderRef.current.onstop = () => resolve();
         mediaRecorderRef.current.stop();
       });
+      await stopPromise;
       
       // Use the actual mime type of the recorder to prevent format issues
       const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
@@ -368,7 +380,7 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
       onSessionComplete(log);
     }
 
-    // 3. Cleanup Audio Contexts
+    // 3. Cleanup Audio Resources
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -377,14 +389,13 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
       processorRef.current.disconnect();
       processorRef.current = null;
     }
-    if (inputContextRef.current) {
-      inputContextRef.current.close();
-      inputContextRef.current = null;
-    }
-    if (outputContextRef.current) {
-      outputContextRef.current.close();
-      outputContextRef.current = null;
-    }
+
+    // Safely close contexts
+    await closeAudioContext(inputContextRef.current);
+    inputContextRef.current = null;
+    
+    await closeAudioContext(outputContextRef.current);
+    outputContextRef.current = null;
     
     setIsAnalyzing(false);
     if (fillerTimeoutRef.current) clearTimeout(fillerTimeoutRef.current);
@@ -395,13 +406,22 @@ const VoiceAgent: React.FC<VoiceAgentProps> = ({
   // Clean up on unmount
   useEffect(() => {
     return () => {
-        if (isConnected) {
-           if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-           if (inputContextRef.current) inputContextRef.current.close();
-           if (outputContextRef.current) outputContextRef.current.close();
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+        }
+        if (processorRef.current) {
+            try { processorRef.current.disconnect(); } catch (e) {}
+        }
+        
+        // We can't await inside cleanup easily, but we can trigger the close
+        if (inputContextRef.current && inputContextRef.current.state !== 'closed') {
+            inputContextRef.current.close().catch(e => console.warn(e));
+        }
+        if (outputContextRef.current && outputContextRef.current.state !== 'closed') {
+            outputContextRef.current.close().catch(e => console.warn(e));
         }
     };
-  }, [isConnected]);
+  }, []);
 
   // Helper for Latency UI
   const getStatusMessage = () => {

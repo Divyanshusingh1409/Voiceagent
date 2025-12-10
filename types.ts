@@ -30,7 +30,7 @@ export interface Agent {
   status: 'Active' | 'Inactive';
   voice: string;
   systemInstruction: string;
-  initialMessage?: string; // New field for the first message
+  initialMessage?: string;
 }
 
 export interface Contact {
@@ -47,12 +47,11 @@ export interface Campaign {
   progress: number;
   totalLeads: number;
   connected: number;
-  // New Configuration Fields
   frequency?: 'daily' | 'weekly';
   scheduleTime?: string;
   startDate?: string;
   contactList?: Contact[];
-  agentPromptOverride?: string; // New field for campaign-specific instruction
+  agentPromptOverride?: string;
 }
 
 export interface CallLog {
@@ -64,15 +63,25 @@ export interface CallLog {
   timestamp: string;
   date: Date;
   sentiment: 'Positive' | 'Neutral' | 'Negative';
-  sentimentReason?: string; // New field for backend analysis
+  sentimentReason?: string;
   transcript: ChatMessage[];
-  recordingUrl?: string; // Blob URL
+  recordingUrl?: string;
 }
 
 export interface ApiKey {
   id: string;
   name: string;
-  key: string; // Masked in UI
+  key: string;
   created: string;
   lastUsed: string;
+}
+
+export interface SipConfig {
+  providerName: string;
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  enabled: boolean;
+  status: 'Connected' | 'Disconnected' | 'Error';
 }
